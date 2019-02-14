@@ -1,3 +1,5 @@
+import numpy as np
+
 class Equation:
     """
     Python class to conveniently represent Reluplex Equation
@@ -112,3 +114,47 @@ def addInequality(network, vars, coeffs, scalar):
         e.addAddend(coeffs[i], vars[i])
     e.setScalar(-scalar)
     network.addEquation(e)
+
+def addComplementOutputSet(network, LB, UB, x):
+    """
+    Function to convert an output specification of staying within a set defined 
+    by a lower bound and upper bound to its complement appropriate for Marabou.
+    Arguments:
+        network: (MarabouNetwork) to which to add constraint
+        LB: (float) specifying the lower bound
+        UB: (float) specifying the upper bound
+        x: (int) specifying the variable
+    """
+    def add_aux_var(network, equation):
+        aux = network.getNewVariable()
+        network.setLowerBound(aux, 0.0)
+        network.setUpperBound(aux, 0.0)
+        equation.markAuxiliaryVariable(aux)
+    # define x_l = l - x
+    x_l = network.getNewVariable()
+    eq = Equation()
+    add_aux_var(network, eq)
+    eq.addAddend(1.0, x_l)
+    eq.addAddend(1.0, x)
+    eq.setScalar(LB)
+    network.addEquation(eq)
+    # define x_u = x - u
+    x_u = network.getNewVariable()
+    eq1 = Equation()
+    add_aux_var(network, eq1)
+    eq1.addAddend(1.0, x_u)
+    eq1.addAddend(-1.0, x)
+    eq1.setScalar(-UB)
+    network.addEquation(eq1)
+    #
+    # For a validity interface we would want both x_l and x_u to be negative, but
+    # for Marabou's satisfiability interface, we assert that at least on of the
+    # constraints must be in violation, meaning one on them is greater than zero
+    # max(x_l, x_u) > 0
+    Y = network.getNewVariable()
+    network.addMaxConstraint({x_l,x_u}, Y)
+    network.setLowerBound(Y, 0.0)
+    if network.outputVars is None:
+        network.outputVars = np.array([[Y]])
+    else: 
+        network.outputVars = np.vstack([network.outputVars, np.array([[Y]]) ])
